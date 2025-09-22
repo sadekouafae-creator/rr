@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sara Crash - Niveau & Aide</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #e66465, #9198e5);
+      color: #fff;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .stats {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    #grille {
+      display: grid;
+      grid-template-columns: repeat(8, 50px);
+      gap: 2px;
+      justify-content: center;
+      margin: 20px auto;
+    }
+
+    .case {
+      width: 50px;
+      height: 50px;
+      background: #fff;
+      border-radius: 10px;
+      font-size: 30px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: grab;
+    }
+
+    .message {
+      font-size: 18px;
+      margin-top: 15px;
+      color: yellow;
+    }
+
+    .btn {
+      padding: 10px 15px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .btn:hover {
+      background: #eee;
+    }
+
+    .powerups {
+      margin-top: 20px;
+    }
+
+    .highlight {
+      background-color: yellow !important;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sara Crash 🍬</h1>
+
+  <div class="stats">
+    Niveau : <span id="niveau">1</span> |
+    Score : <span id="score">0</span> |
+    Objectif : <span id="objectif">0</span> |
+    Mouvements : <span id="mouvements">0</span>
+  </div>
+
+  <div id="grille"></div>
+
+  <div class="message" id="message"></div>
+
+  <div class="powerups">
+    <button class="btn" id="explodeBtn">💥 Explosion</button>
+    <button class="btn" id="shuffleBtn">🔄 Mélanger</button>
+    <button class="btn" id="hintBtn">❓ Indice</button>
+  </div>
+
+  <button class="btn" id="nextLevelBtn" style="display:none;">➡️ Niveau suivant</button>
+  <button class="btn" id="retryBtn" style="display:none;">🔁 Recommencer</button>
+
+  <script>
+    const largeur = 8;
+    const baseEmojis = ['🍓', '🍬', '🍇', '🍊', '🍫', '🍎'];
+    const emojisNiveaux = ['🎈', '🍦', '🍭', '🍉', '🥝']; // Nouveaux symboles
+
+    const niveaux = [
+      { objectif: 100, mouvements: 20, message: "🎉 Bien joué Sara ! 🎉" },
+      { objectif: 200, mouvements: 24, message: "🚀 Superbe, Niveau 2 fini !" },
+      { objectif: 300, mouvements: 26, message: "🏆 Tu maîtrises ça !" },
+      { objectif: 400, mouvements: 30, message: "🔥 Niveau 4 terminé, incroyable !" },
+      { objectif: 500, mouvements: 32, message: "👑 Sara, reine du crash !" },
+    ];
+
+    let niveauActuel = 0;
+    let emojis = [];
+    let score = 0;
+    let mouvements = 0;
+    let objectif = 0;
+    let cases = [];
+    let caseDragged = null;
+    let caseRemplacee = null;
+
+    const grille = document.getElementById("grille");
+    const scoreEl = document.getElementById("score");
+    const objectifEl = document.getElementById("objectif");
+    const mouvementsEl = document.getElementById("mouvements");
+    const niveauEl = document.getElementById("niveau");
+    const messageEl = document.getElementById("message");
+    const nextLevelBtn = document.getElementById("nextLevelBtn");
+    const retryBtn = document.getElementById("retryBtn");
+
+    function initNiveau() {
+      const niveau = niveaux[niveauActuel];
+      emojis = baseEmojis.slice(); // reset emojis
+      for (let i = 0; i <= niveauActuel; i++) {
+        if (emojisNiveaux[i]) emojis.push(emojisNiveaux[i]);
+      }
+
+      objectif = niveau.objectif;
+      mouvements = niveau.mouvements;
+      score = 0;
+      updateUI();
+
+      messageEl.textContent = '';
+      nextLevelBtn.style.display = 'none';
+      retryBtn.style.display = 'none';
+
+      creerGrille();
+    }
+
+    function creerGrille() {
+      grille.innerHTML = '';
+      cases = [];
+
+      for (let i = 0; i < largeur * largeur; i++) {
+        const div = document.createElement('div');
+        div.classList.add('case');
+        div.setAttribute('draggable', true);
+        div.setAttribute('id', i);
+        div.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        grille.appendChild(div);
+        cases.push(div);
+      }
+
+      cases.forEach(c => {
+        c.addEventListener('dragstart', dragStart);
+        c.addEventListener('dragover', e => e.preventDefault());
+        c.addEventListener('drop', dragDrop);
+        c.addEventListener('dragend', dragEnd);
+      });
+    }
+
+    function dragStart(e) {
+      caseDragged = e.target;
+    }
+
+    function dragDrop(e) {
+      caseRemplacee = e.target;
+    }
+
+    function dragEnd() {
+      const id1 = parseInt(caseDragged.id);
+      const id2 = parseInt(caseRemplacee.id);
+      const voisins = [id1 - 1, id1 + 1, id1 - largeur, id1 + largeur];
+
+      if (voisins.includes(id2)) {
+        echanger(id1, id2);
+        if (verifierMatch()) {
+          mouvements--;
+          updateUI();
+          checkFin();
+        } else {
+          echanger(id1, id2); // Annuler
+        }
+      }
+    }
+
+    function echanger(i, j) {
+      let tmp = cases[i].textContent;
+      cases[i].textContent = cases[j].textContent;
+      cases[j].textContent = tmp;
+    }
+
+    function verifierMatch() {
+      let trouvé = false;
+
+      for (let i = 0; i < 64; i++) {
+        if (i % largeur < 6) {
+          const emoji = cases[i].textContent;
+          if (emoji && emoji === cases[i + 1].textContent && emoji === cases[i + 2].textContent) {
+            cases[i].textContent = '';
+            cases[i + 1].textContent = '';
+            cases[i + 2].textContent = '';
+            score += 10;
+            trouvé = true;
+          }
+        }
+      }
+
+      for (let i = 0; i < 40; i++) {
+        const emoji = cases[i].textContent;
+        if (emoji && emoji === cases[i + largeur].textContent && emoji === cases[i + largeur * 2].textContent) {
+          cases[i].textContent = '';
+          cases[i + largeur].textContent = '';
+          cases[i + largeur * 2].textContent = '';
+          score += 10;
+          trouvé = true;
+        }
+      }
+
+      if (trouvé) {
+        setTimeout(() => {
+          tomber();
+          remplir();
+          verifierMatch();
+        }, 200);
+      }
+
+      updateUI();
+      return trouvé;
+    }
+
+    function tomber() {
+      for (let i = 63; i >= largeur; i--) {
+        if (cases[i].textContent === '') {
+          cases[i].textContent = cases[i - largeur].textContent;
+          cases[i - largeur].textContent = '';
+        }
+      }
+    }
+
+    function remplir() {
+      for (let i = 0; i < largeur; i++) {
+        if (cases[i].textContent === '') {
+          cases[i].textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        }
+      }
+    }
+
+    function updateUI() {
+      scoreEl.textContent = score;
+      mouvementsEl.textContent = mouvements;
+      objectifEl.textContent = objectif;
+      niveauEl.textContent = niveauActuel + 1;
+    }
+
+    function checkFin() {
+      if (score >= objectif) {
+        messageEl.textContent = niveaux[niveauActuel].message;
+        nextLevelBtn.style.display = 'inline-block';
+      } else if (mouvements <= 0) {
+        messageEl.textContent = "❌ Tu as perdu ce niveau.";
+        retryBtn.style.display = 'inline-block';
+      }
+    }
+
+    nextLevelBtn.onclick = () => {
+      niveauActuel++;
+      if (niveauActuel >= niveaux.length) {
+        messageEl.textContent = "🎊 Tu as fini tous les niveaux ! Bravo Sara !";
+        nextLevelBtn.style.display = 'none';
+        return;
+      }
+      initNiveau();
+    };
+
+    retryBtn.onclick = () => {
+      initNiveau();
+    };
+
+    // 🎮 Power-Up: Explosion
+    document.getElementById('explodeBtn').onclick = () => {
+      const ligne = Math.floor(Math.random() * largeur);
+      for (let i = 0; i < largeur; i++) {
+        cases[ligne * largeur + i].textContent = '';
+      }
+      score += 20;
+      tomber();
+      remplir();
+      updateUI();
+    };
+
+    // 🎮 Power-Up: Mélanger
+    document.getElementById('shuffleBtn').onclick = () => {
+      for (let c of cases) {
+        c.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      }
+    };
+
+    // 🎮 Power-Up: Indice
+    document.getElementById('hintBtn').onclick = () => {
+      for (let i = 0; i < cases.length; i++) {
+        const voisins = [i + 1, i - 1, i + largeur, i - largeur];
+        for (let j of voisins) {
+          if (j >= 0 && j < cases.length) {
+            echanger(i, j);
+            if (verifierMatch()) {
+              echanger(i, j); // remets
+              cases[i].classList.add("highlight");
+              cases[j].classList.add("highlight");
+              setTimeout(() => {
+                cases[i].classList.remove("highlight");
+                cases[j].classList.remove("highlight");
+              }, 1500);
+              return;
+            }
+            echanger(i, j);
+          }
+        }
+      }
+    };
+
+    // Auto-match régulier
+    setInterval(() => {
+      verifierMatch();
+    }, 1000);
+
+    initNiveau();
+  </script>
+</body>
+</html>
